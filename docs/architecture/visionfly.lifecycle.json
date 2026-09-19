@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "VisionFly Game and Gesture Lifecycle",
+    "output": "visionfly-lifecycle.html",
+    "viewBox": [980, 680],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "game-phases", "label": "Game execution rail", "focus": ["boot", "calibrate", "playing", "gameover", "exit"], "note": "Follow game progression from hardware boot through calibration to gameplay and termination." },
+      { "id": "gesture-debounce", "label": "Gesture tracking and debounce", "focus": ["playing", "tracking", "cooldown"], "note": "Isolate the 200ms debounce cooldown and rolling majority filter." },
+      { "id": "fallback-recovery", "label": "Fault recovery and fallback", "focus": ["playing", "paused", "camera_lost"], "note": "Handle camera disconnect and keyboard fallback without crashing." }
+    ]
+  },
+  "lanes": [
+    { "id": "main", "label": "Game engine states" },
+    { "id": "waiting", "label": "Gesture & pause wait" },
+    { "id": "recovery", "label": "Debounce controller" },
+    { "id": "terminal", "label": "Terminal exits" }
+  ],
+  "states": [
+    { "id": "boot", "type": "start", "label": "Boot & Ingest", "sublabel": "cv2.VideoCapture", "lane": "main", "col": 0, "step": "01", "tag": "init" },
+    { "id": "calibrate", "type": "active", "label": "Calibration", "sublabel": "establish baseline", "lane": "main", "col": 1, "step": "02", "tag": "ready" },
+    { "id": "playing", "type": "decision", "label": "Active Gameplay", "sublabel": "physics + 60 FPS", "lane": "main", "col": 2, "step": "03", "tag": "running" },
+    { "id": "gameover", "type": "waiting", "label": "Game Over", "sublabel": "pipe collision", "lane": "main", "col": 3, "step": "04", "tag": "over" },
+    { "id": "exit", "type": "success", "label": "Clean Exit", "sublabel": "release hardware", "lane": "main", "col": 4, "step": "05", "tag": "exit" },
+    { "id": "tracking", "type": "waiting", "label": "Gesture Wait", "sublabel": "clench fist for flap", "lane": "waiting", "col": 0, "tag": "vision" },
+    { "id": "cooldown", "type": "active", "label": "Debounce Timer", "sublabel": "200ms cooldown", "lane": "recovery", "col": 1, "tag": "cooldown" },
+    { "id": "paused", "type": "waiting", "label": "Game Paused", "sublabel": "palm held / key P", "lane": "waiting", "col": 2, "tag": "pause" },
+    { "id": "camera_lost", "type": "failure", "label": "Camera Lost", "sublabel": "hardware drop", "lane": "terminal", "col": 0, "tag": "fault" },
+    { "id": "crashed", "type": "failure", "label": "High Score Saved", "sublabel": "session recorded", "lane": "terminal", "col": 1, "tag": "terminal" },
+    { "id": "terminated", "type": "success", "label": "Process Closed", "sublabel": "resources freed", "lane": "terminal", "col": 2, "tag": "terminal" }
+  ],
+  "transitions": [
+    { "from": "playing", "to": "tracking", "variant": "security", "route": "straight", "fromSide": "bottom", "toSide": "top" },
+    { "from": "tracking", "to": "camera_lost", "variant": "security", "route": "straight", "fromSide": "bottom", "toSide": "top" },
+    { "from": "gameover", "to": "cooldown", "variant": "security", "route": "straight", "fromSide": "bottom", "toSide": "top" },
+    { "from": "cooldown", "to": "crashed", "variant": "security", "route": "straight", "fromSide": "bottom", "toSide": "top" },
+    { "from": "exit", "to": "paused", "variant": "dashed", "route": "straight", "fromSide": "bottom", "toSide": "top" },
+    { "from": "paused", "to": "terminated", "variant": "emphasis", "route": "straight", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Game Lifecycle", "items": ["Boot initializes camera and checks DirectShow handle", "Calibration ensures player hand is in active tracking zone", "Playing runs physics loop at locked 60 FPS"] },
+    { "dot": "amber", "title": "Perception Debounce", "items": ["5-frame rolling vote suppresses single-frame glitches", "State transition triggers flap only on NEUTRAL -> FLAP", "200ms hardware timer prevents runaway double flaps"] },
+    { "dot": "rose", "title": "Explicit Outcomes", "items": ["Hardware disconnect transitions to Camera Lost fault", "Collision persists final score to database", "Clean exit hook releases camera hardware without hanging"] }
+  ]
+}

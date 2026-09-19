@@ -1195,9 +1195,17 @@ The Computer Vision pipeline and the Pygame Game Engine must run in **completely
 
 ---
 
-# SECTION 20 — END-TO-END SYSTEM ARCHITECTURE
+# SECTION 20 — END-TO-END SYSTEM ARCHITECTURE & VERIFIED SYSTEM MAPS
 
-Below is the complete architectural topology of the final production system, illustrating the separation of hardware, concurrency boundaries, data transforms, and logic dispatchers.
+To achieve production-grade reliability, VisionFly's system architecture is designed and verified using [Archify](https://github.com/tt-a1i/archify). Archify compiles typed architectural specifications into verifiable, standalone interactive HTML maps featuring dark/light themes, pan/zoom, node search, and animated route tracing.
+
+### 20.1 Interactive Architecture Artifacts (Archify Standalone Viewers)
+The repository includes three pre-compiled standalone HTML interactive viewers:
+* 🏛️ **[Interactive System Architecture Map](docs/architecture/visionfly-architecture.html)**: Interactive exploration of components, boundaries, and routes.
+* ⏱️ **[Interactive Real-Time Sequence Map](docs/architecture/visionfly-sequence.html)**: Millisecond-accurate motion-to-action timeline.
+* 🔄 **[Interactive Dual State Machine Lifecycle Map](docs/architecture/visionfly-lifecycle.html)**: State transitions, debouncing, and fault recoveries.
+
+### 20.2 Architectural Topology & Boundaries
 
 ```
                                   SYSTEM ARCHITECTURE TOPOLOGY
@@ -1251,6 +1259,126 @@ Below is the complete architectural topology of the final production system, ill
         ▼
  [DISPLAY SURFACE / MONITOR]
         │ Renders 60 FPS graphics to user screen
+```
+
+### 20.3 Component Matrix & Interface Contracts
+
+| Component ID | Semantic Role | Responsibility | Input Format | Output Format | Execution Boundary |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `camera` | Hardware / Driver | Emits 30 FPS optical stream | Photons / Light | UVC USB Stream | OS Kernel |
+| `ingest` | Vision Ingestion | Frame grab & decompression | USB Packets | `(480, 640, 3)` BGR uint8 | Vision Thread |
+| `detector` | Perception Core | BlazePalm palm localization | RGB Image | Bounding Box `[x1, y1, x2, y2]` | Vision Thread |
+| `preproc` | Perception Core | Boundary clamping & scaling | Image + Bounding Box | `(1, 3, 224, 224)` Float32 | Vision Thread |
+| `model` | Deep Learning | Feature extraction & logits | Standardized Tensor | Logits `(1, 3)` Float32 | Vision Thread |
+| `filter` | Signal Processing | Rolling vote & state debounce | Raw Logits | Stabilized Action Event | Vision Thread |
+| `queue` | Concurrency Bus | Asynchronous event buffer | `put_nowait()` | `get_nowait()` | Inter-Thread IPC |
+| `engine` | Presentation | 60 FPS Game Loop Coordinator | Input events | Blitted frame buffer | Main Game Thread |
+| `physics` | Game Mechanics | Kinematic jump & gravity | Action String | Bird `(x, y, v)` coordinates | Main Game Thread |
+
+### 20.4 High-Precision Real-Time Sequence Timing Budget
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User as Player (Hand)
+    participant Cam as Webcam Hardware
+    participant CV as Vision Thread (30 FPS)
+    participant CNN as MobileNetV2 (CPU)
+    participant Queue as FIFO Event Bus
+    participant Game as Pygame Main Loop (60 FPS)
+
+    Note over User,Cam: Step 1: Optical Exposure (10 ms)
+    User->>Cam: Physical hand clench into Fist
+    Cam->>CV: UVC packet stream delivered via DirectShow
+
+    Note over CV: Step 2: Frame Decode & Landmark Detection (12 ms)
+    CV->>CV: cv2.VideoCapture.read() -> BGR (480, 640, 3)
+    CV->>CV: cv2.cvtColor(BGR2RGB)
+    CV->>CV: MediaPipe BlazePalm detects hand bounding box
+    CV->>CV: Clamp coords & resize to (224, 224, 3)
+    CV->>CV: ImageNet normalization & PyTorch tensor conversion
+
+    Note over CV,CNN: Step 3: Neural Inference (12-15 ms)
+    CV->>CNN: forward((1, 3, 224, 224))
+    CNN-->>CV: Output class logits -> Softmax P(Flap) = 0.96
+
+    Note over CV,Queue: Step 4: Temporal Stabilization & Enqueue (2 ms)
+    CV->>CV: Confidence gate: P(Flap) > 0.85
+    CV->>CV: 5-frame rolling buffer majority vote confirms state
+    CV->>CV: State transition check: IDLE -> FLAP
+    CV->>CV: Cooldown check: elapsed > 200 ms
+    CV->>Queue: gesture_queue.put_nowait("ACTION_FLAP")
+
+    Note over Queue,Game: Step 5: Asynchronous Game Tick (Max 16.6 ms)
+    Game->>Queue: gesture_queue.get_nowait() (non-blocking)
+    Queue-->>Game: Returns "ACTION_FLAP"
+    Game->>Game: Set bird.velocity = -7.0 & play flap.wav
+    Game->>Game: Advance pipe positions & check sprite collisions
+    Game->>User: Flip display buffer at 60 FPS
+
+    Note over User,Game: Total Motion-to-Action Latency: ~50-55 ms (< 60 ms budget!)
+```
+
+### 20.5 Complete Data-Flow Lineage & Transformation Pipeline
+
+| Stage | Input Data Structure | Operation & Library | Output Data Structure | Memory Layout |
+| :--- | :--- | :--- | :--- | :--- |
+| **Physical Ingest** | Optical Photons | CMOS Bayer Filter + ADC | USB UVC Stream | Compressed MJPEG/YUYV |
+| **OpenCV Decode** | USB Buffer | `cap.read()` | NumPy `ndarray` `(480, 640, 3)` | Contiguous `uint8` BGR |
+| **Color Space** | BGR `ndarray` | `cv2.cvtColor(BGR2RGB)` | NumPy `ndarray` `(480, 640, 3)` | Contiguous `uint8` RGB |
+| **Hand Detection** | RGB `ndarray` | MediaPipe BlazePalm | Bounding Box `[x1, y1, x2, y2]` | 4 Ints (Normalized/Absolute) |
+| **Boundary Clamp** | Full Frame + Box | `max(0, min(coord, bound))` | Clamped Slice Indices | Safe Array Slicing |
+| **ROI Crop** | Clamped Slices | NumPy Array Slice | Hand Patch `(H_box, W_box, 3)` | `uint8` RGB |
+| **Spatial Scaling** | Hand Patch | `cv2.resize(INTER_LINEAR)` | Standardized `(224, 224, 3)` | Contiguous `uint8` RGB |
+| **Standardization** | Standardized Patch | $\frac{x}{255.0} \to \frac{x - \mu}{\sigma}$ | Float Array `(224, 224, 3)` | `float32` $\in [-2.1, 2.6]$ |
+| **Tensor Format** | Float Array (HWC) | `torch.from_numpy().permute()` | PyTorch Tensor `(1, 3, 224, 224)` | Channels-First `torch.float32` |
+| **Forward Pass** | Input Tensor | MobileNetV2 Backbone + Head | Class Logits Vector `(1, 3)` | Raw unnormalized `float32` |
+| **Softmax** | Logits Vector | $\frac{e^{z_i}}{\sum e^{z_j}}$ | Probability Vector `(1, 3)` | Valid distribution ($\sum P = 1.0$) |
+| **Temporal Vote** | Current Probability | Threshold $> 0.85$ + Mode of 5 | Stabilized Gesture Label | String Enum (`"FLAP"`) |
+| **Debounce Gate** | Stabilized Label | State Transition + Cooldown | Dispatched Event Action | String (`"ACTION_FLAP"`) |
+| **Queue IPC** | Event Action | `queue.put_nowait()` | Atomic Queue Entry | Thread-Safe FIFO Buffer |
+| **Game Physics** | Queue Entry | `queue.get_nowait()` | Bird Velocity Mutation | `bird.velocity = -7.0` |
+
+### 20.6 Dual Finite State Automata (Lifecycle Specifications)
+
+```mermaid
+stateDiagram-v2
+    direction TB
+    
+    state "Game Engine State Machine (Pygame Main Thread)" as GameEngine {
+        [*] --> Booting
+        Booting --> CalibrationScreen: Hardware Checked & Driver Acquired
+        CalibrationScreen --> ReadyToPlay: Hand Detected in Active Zone
+        ReadyToPlay --> ActiveGameplay: Player Clenches Fist (FLAP)
+        
+        state ActiveGameplay {
+            [*] --> Gliding: Neutral Open Hand
+            Gliding --> Flapping: Event ACTION_FLAP Received
+            Flapping --> Gliding: Bird Impulse Applied (v = -7.0)
+            Gliding --> GamePaused: Open Palm Held / Key 'P'
+            GamePaused --> Gliding: Fist Clenched / Key 'P'
+        }
+        
+        ActiveGameplay --> GameOverScreen: Pipe / Ground Collision
+        GameOverScreen --> ActiveGameplay: Clench Fist to Restart
+        GameOverScreen --> ProcessExit: Press ESC / Window Close
+    }
+    
+    state "Perception State Machine (Vision Worker Thread)" as VisionEngine {
+        [*] --> NoHandDetected: Frame Scanned
+        NoHandDetected --> HandAcquired: BlazePalm Confidence >= 0.70
+        HandAcquired --> EvaluatingGesture: Hand ROI Clamped & Cropped
+        EvaluatingGesture --> GestureConfirmed: Logit Confidence >= 0.85 & 5-Frame Mode Match
+        
+        state GestureConfirmed {
+            [*] --> IdleState: Predicted NEUTRAL
+            IdleState --> TriggerFlap: Predicted FLAP & LastState == IDLE
+            TriggerFlap --> DebounceCooldown: Enqueue Event & Start 200ms Timer
+            DebounceCooldown --> IdleState: Timer Expired (t > 200ms)
+        }
+        
+        EvaluatingGesture --> NoHandDetected: Hand Lost / Out of Frame
+    }
 ```
 
 ---

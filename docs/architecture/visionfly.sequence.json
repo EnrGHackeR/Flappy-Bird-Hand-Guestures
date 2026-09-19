@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "VisionFly Real-Time Concurrency Sequence",
+    "output": "visionfly-sequence.html",
+    "viewBox": [1080, 560],
+    "column_fit": "spread",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "perception-to-queue", "label": "Perception to queue", "focus": ["user", "camera", "cv", "cnn", "queue"], "note": "Trace hand movement through vision pipeline and event queuing." },
+      { "id": "queue-to-game", "label": "Queue to game engine", "focus": ["queue", "game", "user"], "note": "Trace non-blocking event polling, physics update, and display rendering." }
+    ]
+  },
+  "participants": [
+    { "id": "user", "type": "external", "label": "Player", "sublabel": "hand in view" },
+    { "id": "camera", "type": "external", "label": "Webcam", "sublabel": "UVC 30 FPS" },
+    { "id": "cv", "type": "backend", "label": "Vision Thread", "sublabel": "OpenCV + MediaPipe" },
+    { "id": "cnn", "type": "backend", "label": "CNN Model", "sublabel": "MobileNetV2" },
+    { "id": "queue", "type": "messagebus", "label": "Event Queue", "sublabel": "FIFO Queue" },
+    { "id": "game", "type": "frontend", "label": "Pygame Loop", "sublabel": "60 FPS Main" }
+  ],
+  "segments": [
+    { "from": 150, "to": 260, "label": "Frame Ingestion (10ms)" },
+    { "from": 260, "to": 370, "label": "Inference & Filter (15ms)" },
+    { "from": 370, "to": 480, "label": "Physics & Render (16ms)" }
+  ],
+  "messages": [
+    { "id": "hand-move", "from": "user", "to": "camera", "y": 170, "label": "clench fist (FLAP)", "variant": "default" },
+    { "id": "read-frame", "from": "camera", "to": "cv", "y": 205, "label": "cap.read() 640x480 BGR", "variant": "emphasis" },
+    { "id": "forward-pass", "from": "cv", "to": "cnn", "y": 245, "label": "forward(crop 224x224)", "variant": "emphasis" },
+    { "id": "return-logits", "from": "cnn", "to": "cv", "y": 280, "label": "Softmax P(Flap)=0.96", "variant": "return" },
+    { "id": "put-event", "from": "cv", "to": "queue", "y": 320, "label": "put_nowait(ACTION_FLAP)", "variant": "emphasis" },
+    { "id": "poll-queue", "from": "game", "to": "queue", "y": 365, "label": "get_nowait()", "variant": "default" },
+    { "id": "return-action", "from": "queue", "to": "game", "y": 405, "label": "ACTION_FLAP event", "variant": "return" },
+    { "id": "render-screen", "from": "game", "to": "user", "y": 450, "label": "bird jump & blit (60 FPS)", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "camera", "from": 170, "to": 210, "type": "external" },
+    { "participant": "cv", "from": 205, "to": 325, "type": "backend" },
+    { "participant": "cnn", "from": 245, "to": 285, "type": "backend" },
+    { "participant": "queue", "from": 320, "to": 410, "type": "messagebus" },
+    { "participant": "game", "from": 365, "to": 455, "type": "frontend" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Sub-60ms Total Latency",
+      "items": [
+        "Ingestion: 10ms (hardware UVC stream read)",
+        "Inference: 15ms (MobileNetV2 CPU forward pass)",
+        "Filter & Queue: 2ms (vote, debounce, atomic put)",
+        "Pygame Tick: ~16ms (next frame display at 60 FPS)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Decoupled Asynchrony",
+      "items": [
+        "Vision thread runs at ~30 FPS independently",
+        "Pygame never blocks waiting for camera read",
+        "Non-blocking get_nowait() guarantees 60 FPS"
+      ]
+    }
+  ]
+}

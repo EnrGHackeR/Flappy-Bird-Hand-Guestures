@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "VisionFly System Architecture",
+    "output": "visionfly-architecture.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "full-pipeline",
+        "label": "End-to-end vision pipeline",
+        "focus": ["camera", "ingest", "detector", "preproc", "model", "filter", "queue", "engine", "physics", "display"],
+        "note": "Trace input from camera sensor through ML classification to game physics rendering."
+      },
+      {
+        "id": "ml-core",
+        "label": "Computer vision & deep learning core",
+        "focus": ["ingest", "detector", "preproc", "model", "filter"],
+        "note": "Examine hand detection, ROI cropping, MobileNetV2 inference, and temporal debouncing."
+      },
+      {
+        "id": "game-concurrency",
+        "label": "Asynchronous game concurrency",
+        "focus": ["filter", "queue", "engine", "physics", "display", "db"],
+        "note": "Decoupled 60 FPS Pygame engine communicating via thread-safe FIFO queue."
+      }
+    ]
+  },
+  "components": [
+    { "id": "camera", "type": "external", "label": "Webcam Sensor", "sublabel": "CMOS UVC @ 30 FPS", "pos": [30, 200], "size": [130, 60] },
+    { "id": "ingest", "type": "backend", "label": "Frame Ingestion", "sublabel": "OpenCV VideoCapture", "pos": [230, 200], "size": [140, 60] },
+    { "id": "detector", "type": "backend", "label": "Hand Detector", "sublabel": "MediaPipe BlazePalm", "pos": [430, 200], "size": [140, 60] },
+    { "id": "preproc", "type": "backend", "label": "ROI Preprocessor", "sublabel": "Crop, 224x224, Norm", "pos": [630, 200], "size": [140, 60] },
+    { "id": "model", "type": "backend", "label": "CNN Classifier", "sublabel": "MobileNetV2 PyTorch", "pos": [830, 200], "size": [140, 60] },
+    { "id": "filter", "type": "backend", "label": "Temporal Filter", "sublabel": "5-Frame Vote & Debounce", "pos": [1030, 200], "size": [140, 60] },
+    { "id": "queue", "type": "messagebus", "label": "Event Queue", "sublabel": "thread-safe FIFO", "pos": [1030, 380], "size": [140, 60] },
+    { "id": "engine", "type": "frontend", "label": "Pygame Engine", "sublabel": "60 FPS Main Loop", "pos": [780, 380], "size": [140, 60] },
+    { "id": "physics", "type": "frontend", "label": "Bird Physics", "sublabel": "v = -7 impulse, gravity", "pos": [530, 380], "size": [140, 60] },
+    { "id": "display", "type": "frontend", "label": "Render Display", "sublabel": "Screen Surface & HUD", "pos": [280, 380], "size": [140, 60] },
+    { "id": "db", "type": "database", "label": "Score Database", "sublabel": "SQLite / MySQL", "pos": [780, 520], "size": [140, 60] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Vision Worker Thread (~30 FPS Async)", "wraps": ["ingest", "detector", "preproc", "model", "filter"] },
+    { "kind": "region", "label": "Pygame Main Thread (60 FPS Locked)", "wraps": ["engine", "physics", "display"] }
+  ],
+  "connections": [
+    { "id": "cam-to-ingest", "from": "camera", "to": "ingest", "label": "USB video", "variant": "emphasis" },
+    { "id": "ingest-to-det", "from": "ingest", "to": "detector" },
+    { "id": "det-to-prep", "from": "detector", "to": "preproc" },
+    { "id": "prep-to-model", "from": "preproc", "to": "model" },
+    { "id": "model-to-filter", "from": "model", "to": "filter" },
+    { "id": "filter-to-queue", "from": "filter", "to": "queue", "label": "ACTION_FLAP", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
+    { "id": "queue-to-engine", "from": "queue", "to": "engine", "fromSide": "left", "toSide": "right" },
+    { "id": "engine-to-phys", "from": "engine", "to": "physics", "fromSide": "left", "toSide": "right" },
+    { "id": "phys-to-disp", "from": "physics", "to": "display", "fromSide": "left", "toSide": "right" },
+    { "id": "engine-to-db", "from": "engine", "to": "db", "variant": "dashed", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Perception Subsystem", "items": ["MediaPipe BlazePalm isolates hand bounding box", "Standardized 224x224 tensor normalization", "MobileNetV2 executes forward pass in ~12ms on CPU"] },
+    { "dot": "emerald", "title": "Asynchronous Concurrency", "items": ["Vision thread runs independently at 30 FPS", "Pygame main thread locked at solid 60 FPS", "Thread-safe FIFO queue eliminates rendering stalls"] },
+    { "dot": "rose", "title": "Temporal Stabilization", "items": ["5-frame rolling majority voting suppresses glitches", "200ms debounce cooldown prevents double jumping", "High-confidence threshold (>0.85) eliminates false flaps"] }
+  ]
+}
