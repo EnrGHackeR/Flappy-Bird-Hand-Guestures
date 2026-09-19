@@ -6,6 +6,10 @@
 > **Project Repository**: `Flappy-Bird-Hand-Guestures`  
 > **Document Purpose**: Complete first-principles pedagogical guide, theoretical foundation, mathematical manual, literature survey, and architecture evaluation for building a real-time hand-gesture-controlled gaming system.
 
+<p align="center">
+  <img src="docs/assets/visionfly_hero_banner.jpg" alt="VisionFly Real-Time Hand Gesture Controlled Flappy Bird" width="100%" style="border-radius: 12px; margin: 15px 0; box-shadow: 0 8px 24px rgba(0,0,0,0.5);"/>
+</p>
+
 ---
 
 ## TABLE OF CONTENTS
@@ -473,6 +477,11 @@ The resulting feature map has dimensions $3 \times 3$.
 * **Softmax Layer**: Converts arbitrary raw real-valued numbers (logits) into a calibrated probability distribution summing to 1.0.
 
 ### 6.5 Hierarchical Feature Representation in CNNs
+
+<p align="center">
+  <img src="docs/assets/cnn_gesture_pipeline.jpg" alt="CNN Feature Hierarchy and Gesture Processing Pipeline" width="100%" style="border-radius: 10px; margin: 15px 0; box-shadow: 0 6px 20px rgba(0,0,0,0.4);"/>
+</p>
+
 As an image passes deeper through stacked convolutional layers, the network automatically builds a hierarchy of visual abstractions:
 
 ```
