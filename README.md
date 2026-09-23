@@ -246,7 +246,6 @@ Before implementing or training new models, thoroughly review:
 ## 👨‍💻 Engineering Team & Mentorship
 
 * **Abhishek Dutta** — Core Developer & Student Researcher
-* **Samhita Mondal** — Core Developer & Student Researcher
 * **Computer Vision, Deep Learning & Systems Mentorship** — Antigravity Agentic Pair Programming
 * **Architectural Modeling Tooling** — [Archify](https://github.com/tt-a1i/archify) & [Chart.js](https://www.chartjs.org/)
 
